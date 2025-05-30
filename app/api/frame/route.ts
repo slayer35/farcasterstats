@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'edge';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
-const WIELD_API = 'https://build.wield.xyz';
+const NEYNAR_API = 'https://api.neynar.com/v2/farcaster';
 
 async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
   let lastError;
@@ -16,7 +16,8 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'Accept': 'application/json'
+          'Accept': 'application/json',
+          'api_key': 'NEYNAR_API_DOCS_KEY' // Using public docs key for testing
         }
       });
       
@@ -45,7 +46,7 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
 
 async function fetchUserStats(fid: string) {
   try {
-    const response = await fetchWithRetry(`${WIELD_API}/v1/user/${fid}/stats`);
+    const response = await fetchWithRetry(`${NEYNAR_API}/user/${fid}`);
     return response;
   } catch (error) {
     console.log('Failed to fetch user stats:', error);
@@ -69,15 +70,15 @@ export async function POST(req: NextRequest) {
     console.log('FID:', fid);
 
     // Fetch user stats
-    const stats = await fetchUserStats(fid);
-    console.log('User stats:', stats);
+    const response = await fetchUserStats(fid);
+    console.log('User response:', response);
 
-    if (!stats) {
+    if (!response?.user) {
       throw new Error('User not found');
     }
 
     // Get cast count from response
-    const postCount = stats.castCount || 0;
+    const postCount = response.user.active_status?.total_casts || 0;
     console.log('Final post count:', postCount);
     
     const status = getStatusText(postCount);
