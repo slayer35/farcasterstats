@@ -4,11 +4,11 @@ export const runtime = 'edge';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
 
-// Hubble API endpoints - using multiple hubs for redundancy
+// Hubble API endpoints - using reliable hubs
 const HUBBLE_ENDPOINTS = [
-  'https://foss.farchiver.xyz',
-  'https://snapchain.farcaster.standardcrypto.vc',
-  'https://nemes.farcaster.xyz'
+  'https://hub-api.neynar.com',
+  'https://api.farcaster.standardcrypto.vc:2281',
+  'https://api.farcaster.xyz'
 ];
 
 async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
@@ -31,8 +31,14 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      return await response.json();
+
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        console.log('Invalid JSON response:', text);
+        throw new Error('Invalid JSON response');
+      }
     } catch (error) {
       lastError = error;
       console.log(`Attempt ${i + 1} failed for ${url}:`, error);
@@ -46,11 +52,8 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
 async function fetchUserData(fid: string) {
   for (const endpoint of HUBBLE_ENDPOINTS) {
     try {
-      const response = await fetchWithRetry(`${endpoint}/v1/info`);
-      if (response.ok) {
-        const userData = await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
-        return userData;
-      }
+      const userData = await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
+      return userData;
     } catch (error) {
       console.log(`Failed to fetch from ${endpoint}:`, error);
       continue;
@@ -62,11 +65,8 @@ async function fetchUserData(fid: string) {
 async function fetchCastCount(fid: string) {
   for (const endpoint of HUBBLE_ENDPOINTS) {
     try {
-      const response = await fetchWithRetry(`${endpoint}/v1/info`);
-      if (response.ok) {
-        const castsData = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1&reverse=true`);
-        return castsData;
-      }
+      const castsData = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1&reverse=true`);
+      return castsData;
     } catch (error) {
       console.log(`Failed to fetch from ${endpoint}:`, error);
       continue;
