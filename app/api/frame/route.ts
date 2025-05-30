@@ -7,11 +7,12 @@ const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
 // Hubble API endpoints
 const HUBBLE_ENDPOINTS = [
   'https://api.hub.wevm.dev',
-  'https://nemes.farcaster.xyz:2281',
-  'https://hubble.degen.dev'
+  'https://nemes.farcaster.xyz',
+  'https://hubble.degen.dev',
+  'http://nemes.farcaster.xyz:2281'
 ];
 
-async function fetchWithRetry(url: string, retries = 3, timeout = 5000) {
+async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
   let lastError;
   
   for (let i = 0; i < retries; i++) {
@@ -20,7 +21,13 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 5000) {
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
       const response = await fetch(url, {
-        signal: controller.signal
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'FarcasterStats/1.0'
+        },
+        cache: 'no-store',
+        keepalive: true
       });
       
       clearTimeout(timeoutId);
