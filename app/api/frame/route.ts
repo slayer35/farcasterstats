@@ -4,12 +4,11 @@ export const runtime = 'edge';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
 
-// Hubble API endpoints
+// Hubble API endpoints - using multiple hubs for redundancy
 const HUBBLE_ENDPOINTS = [
-  'https://api.hub.wevm.dev',
-  'https://nemes.farcaster.xyz',
-  'https://hubble.degen.dev',
-  'http://nemes.farcaster.xyz:2281'
+  'https://foss.farchiver.xyz',
+  'https://snapchain.farcaster.standardcrypto.vc',
+  'https://nemes.farcaster.xyz'
 ];
 
 async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
@@ -23,11 +22,8 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
       const response = await fetch(url, {
         signal: controller.signal,
         headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'FarcasterStats/1.0'
-        },
-        cache: 'no-store',
-        keepalive: true
+          'Accept': 'application/json'
+        }
       });
       
       clearTimeout(timeoutId);
@@ -50,7 +46,11 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
 async function fetchUserData(fid: string) {
   for (const endpoint of HUBBLE_ENDPOINTS) {
     try {
-      return await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
+      const response = await fetchWithRetry(`${endpoint}/v1/info`);
+      if (response.ok) {
+        const userData = await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
+        return userData;
+      }
     } catch (error) {
       console.log(`Failed to fetch from ${endpoint}:`, error);
       continue;
@@ -62,8 +62,11 @@ async function fetchUserData(fid: string) {
 async function fetchCastCount(fid: string) {
   for (const endpoint of HUBBLE_ENDPOINTS) {
     try {
-      const data = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1`);
-      return data;
+      const response = await fetchWithRetry(`${endpoint}/v1/info`);
+      if (response.ok) {
+        const castsData = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1&reverse=true`);
+        return castsData;
+      }
     } catch (error) {
       console.log(`Failed to fetch from ${endpoint}:`, error);
       continue;
@@ -87,11 +90,18 @@ export async function POST(req: NextRequest) {
     const { untrustedData: { fid } } = data;
     console.log('FID:', fid);
 
-    // Fetch user data and cast count in parallel
-    const [userData, castsData] = await Promise.all([
-      fetchUserData(fid),
-      fetchCastCount(fid)
-    ]);
+    // First check if the hub is available
+    let userData, castsData;
+    
+    try {
+      [userData, castsData] = await Promise.all([
+        fetchUserData(fid),
+        fetchCastCount(fid)
+      ]);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      throw new Error('Failed to fetch user data');
+    }
 
     console.log('User data:', userData);
     console.log('Casts data:', castsData);
@@ -101,7 +111,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Get cast count from response
-    const postCount = castsData.count || 0;
+    const postCount = castsData.messages?.length ? castsData.count : 0;
     console.log('Final post count:', postCount);
     
     const status = getStatusText(postCount);
