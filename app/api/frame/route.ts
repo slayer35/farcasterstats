@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const runtime = 'edge';
+
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
 console.log('Base URL:', baseUrl);
 
