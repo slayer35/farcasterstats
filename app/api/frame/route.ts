@@ -3,13 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'edge';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
-
-// Hubble API endpoints - using reliable hubs
-const HUBBLE_ENDPOINTS = [
-  'https://hub-api.neynar.com',
-  'https://api.farcaster.standardcrypto.vc:2281',
-  'https://api.farcaster.xyz'
-];
+const WIELD_API = 'https://build.wield.xyz';
 
 async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
   let lastError;
@@ -49,30 +43,14 @@ async function fetchWithRetry(url: string, retries = 3, timeout = 10000) {
   throw lastError;
 }
 
-async function fetchUserData(fid: string) {
-  for (const endpoint of HUBBLE_ENDPOINTS) {
-    try {
-      const userData = await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
-      return userData;
-    } catch (error) {
-      console.log(`Failed to fetch from ${endpoint}:`, error);
-      continue;
-    }
+async function fetchUserStats(fid: string) {
+  try {
+    const response = await fetchWithRetry(`${WIELD_API}/v1/user/${fid}/stats`);
+    return response;
+  } catch (error) {
+    console.log('Failed to fetch user stats:', error);
+    throw error;
   }
-  throw new Error('All Hubble endpoints failed');
-}
-
-async function fetchCastCount(fid: string) {
-  for (const endpoint of HUBBLE_ENDPOINTS) {
-    try {
-      const castsData = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1&reverse=true`);
-      return castsData;
-    } catch (error) {
-      console.log(`Failed to fetch from ${endpoint}:`, error);
-      continue;
-    }
-  }
-  throw new Error('All Hubble endpoints failed');
 }
 
 function getStatusText(postCount: number): string {
@@ -90,28 +68,16 @@ export async function POST(req: NextRequest) {
     const { untrustedData: { fid } } = data;
     console.log('FID:', fid);
 
-    // First check if the hub is available
-    let userData, castsData;
-    
-    try {
-      [userData, castsData] = await Promise.all([
-        fetchUserData(fid),
-        fetchCastCount(fid)
-      ]);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-      throw new Error('Failed to fetch user data');
-    }
+    // Fetch user stats
+    const stats = await fetchUserStats(fid);
+    console.log('User stats:', stats);
 
-    console.log('User data:', userData);
-    console.log('Casts data:', castsData);
-
-    if (!userData || !castsData) {
+    if (!stats) {
       throw new Error('User not found');
     }
 
     // Get cast count from response
-    const postCount = castsData.messages?.length ? castsData.count : 0;
+    const postCount = stats.castCount || 0;
     console.log('Final post count:', postCount);
     
     const status = getStatusText(postCount);
