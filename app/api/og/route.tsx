@@ -8,6 +8,8 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const count = searchParams.get('count') || '0';
     const status = searchParams.get('status') || 'Unknown';
+    const followers = searchParams.get('followers') || '0';
+    const following = searchParams.get('following') || '0';
 
     return new ImageResponse(
       (
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
           <div
             style={{
               display: 'flex',
-              fontSize: '80px',
+              fontSize: '70px',
               fontWeight: 'bold',
               color: '#F3F4F6',
               marginBottom: '20px',
@@ -34,6 +36,42 @@ export async function GET(req: NextRequest) {
           >
             {count} Posts
           </div>
+          
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'row',
+              gap: '40px',
+              marginBottom: '30px',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                color: '#9CA3AF',
+                fontSize: '32px',
+              }}
+            >
+              <div style={{ fontWeight: 'bold', color: '#F3F4F6' }}>{followers}</div>
+              <div>Followers</div>
+            </div>
+            
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                color: '#9CA3AF',
+                fontSize: '32px',
+              }}
+            >
+              <div style={{ fontWeight: 'bold', color: '#F3F4F6' }}>{following}</div>
+              <div>Following</div>
+            </div>
+          </div>
+          
           <div
             style={{
               display: 'flex',
