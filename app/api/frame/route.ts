@@ -3,7 +3,67 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'edge';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
-console.log('Base URL:', baseUrl);
+
+// Hubble API endpoints
+const HUBBLE_ENDPOINTS = [
+  'https://api.hub.wevm.dev',
+  'https://nemes.farcaster.xyz:2281',
+  'https://hubble.degen.dev'
+];
+
+async function fetchWithRetry(url: string, retries = 3, timeout = 5000) {
+  let lastError;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
+      
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      console.log(`Attempt ${i + 1} failed for ${url}:`, error);
+      continue;
+    }
+  }
+  
+  throw lastError;
+}
+
+async function fetchUserData(fid: string) {
+  for (const endpoint of HUBBLE_ENDPOINTS) {
+    try {
+      return await fetchWithRetry(`${endpoint}/v1/userDataByFid?fid=${fid}`);
+    } catch (error) {
+      console.log(`Failed to fetch from ${endpoint}:`, error);
+      continue;
+    }
+  }
+  throw new Error('All Hubble endpoints failed');
+}
+
+async function fetchCastCount(fid: string) {
+  for (const endpoint of HUBBLE_ENDPOINTS) {
+    try {
+      const data = await fetchWithRetry(`${endpoint}/v1/castsByFid?fid=${fid}&limit=1`);
+      return data;
+    } catch (error) {
+      console.log(`Failed to fetch from ${endpoint}:`, error);
+      continue;
+    }
+  }
+  throw new Error('All Hubble endpoints failed');
+}
 
 function getStatusText(postCount: number): string {
   if (postCount <= 100) return '🌱 Newbie';
@@ -20,14 +80,13 @@ export async function POST(req: NextRequest) {
     const { untrustedData: { fid } } = data;
     console.log('FID:', fid);
 
-    // Fetch user data from Hubble API
-    const userResponse = await fetch(`https://api.hub.wevm.dev/v1/userDataByFid?fid=${fid}`);
-    const userData = await userResponse.json();
-    console.log('User data:', userData);
+    // Fetch user data and cast count in parallel
+    const [userData, castsData] = await Promise.all([
+      fetchUserData(fid),
+      fetchCastCount(fid)
+    ]);
 
-    // Fetch cast count from Hubble API
-    const castsResponse = await fetch(`https://api.hub.wevm.dev/v1/castsByFid?fid=${fid}&limit=1`);
-    const castsData = await castsResponse.json();
+    console.log('User data:', userData);
     console.log('Casts data:', castsData);
 
     if (!userData || !castsData) {
