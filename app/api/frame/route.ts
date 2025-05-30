@@ -6,6 +6,8 @@ const client = new NeynarAPIClient({
   apiKey: process.env.NEYNAR_API_KEY || ''
 });
 
+const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
+
 function getStatusText(postCount: number): string {
   if (postCount <= 100) return 'Newbie';
   if (postCount <= 250) return 'Farcaster';
@@ -28,10 +30,10 @@ export async function POST(req: NextRequest) {
     const postCount = user?.profile?.stats?.total_casts || 0;
     const status = getStatusText(postCount);
 
-    const imageUrl = `${process.env.HOST_URL}/api/og?count=${postCount}&status=${encodeURIComponent(status)}`;
+    const imageUrl = `${baseUrl}/api/og?count=${postCount}&status=${encodeURIComponent(status)}`;
 
     return new NextResponse(
-      `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${imageUrl}"/><meta property="fc:frame:button:1" content="Refresh Stats"/><meta property="fc:frame:post_url" content="${process.env.HOST_URL}/api/frame"/></head><body><p>${postCount} posts - ${status}</p></body></html>`,
+      `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${imageUrl}"/><meta property="fc:frame:button:1" content="Refresh Stats"/><meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/></head><body><p>${postCount} posts - ${status}</p></body></html>`,
       {
         headers: {
           'Content-Type': 'text/html',
@@ -43,10 +45,10 @@ export async function POST(req: NextRequest) {
     );
   } catch (error) {
     console.error('Error:', error);
-    const errorUrl = `${process.env.HOST_URL}/api/og?count=0&status=Error`;
+    const errorUrl = `${baseUrl}/api/og?count=0&status=Error`;
 
     return new NextResponse(
-      `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${errorUrl}"/><meta property="fc:frame:button:1" content="Try Again"/><meta property="fc:frame:post_url" content="${process.env.HOST_URL}/api/frame"/></head><body>Error occurred</body></html>`,
+      `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${errorUrl}"/><meta property="fc:frame:button:1" content="Try Again"/><meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/></head><body>Error occurred</body></html>`,
       {
         headers: {
           'Content-Type': 'text/html',
@@ -60,10 +62,10 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET() {
-  const imageUrl = `${process.env.HOST_URL}/api/og?count=0&status=Click%20to%20Start!`;
+  const imageUrl = `${baseUrl}/api/og?count=0&status=Click%20to%20Start!`;
 
   return new NextResponse(
-    `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${imageUrl}"/><meta property="fc:frame:button:1" content="Check Your Stats"/><meta property="fc:frame:post_url" content="${process.env.HOST_URL}/api/frame"/></head><body>Click to start!</body></html>`,
+    `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${imageUrl}"/><meta property="fc:frame:button:1" content="Check Your Stats"/><meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/></head><body>Click to start!</body></html>`,
     {
       headers: {
         'Content-Type': 'text/html',
