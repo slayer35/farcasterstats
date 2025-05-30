@@ -30,7 +30,7 @@ export default function Home() {
           </div>
 
           <div className="bg-gray-800 p-4 rounded-lg mt-8 font-mono text-sm">
-            {`${process.env.NEXT_PUBLIC_HOST_URL || 'http://localhost:3001'}/api/frame`}
+            {`https://farcasterstats.vercel.app/api/frame`}
           </div>
         </div>
       </div>
