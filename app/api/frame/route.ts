@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { NeynarAPIClient } from '@neynar/nodejs-sdk';
 
 const baseUrl = process.env.HOST_URL || 'https://farcasterstats.vercel.app';
 console.log('Base URL:', baseUrl);
-console.log('Neynar API Key:', process.env.NEYNAR_API_KEY ? 'Set' : 'Not set');
-
-// Initialize with v2 API
-const client = new NeynarAPIClient({
-  apiKey: process.env.NEYNAR_API_KEY || ''
-});
 
 function getStatusText(postCount: number): string {
   if (postCount <= 100) return '🌱 Newbie';
@@ -25,18 +18,25 @@ export async function POST(req: NextRequest) {
     const { untrustedData: { fid } } = data;
     console.log('FID:', fid);
 
-    const { users } = await client.fetchBulkUsers({ fids: [Number(fid)] });
-    console.log('User data:', users[0]);
-    
-    const user = users[0];
-    if (!user) {
+    // Fetch user data from Hubble API
+    const userResponse = await fetch(`https://api.hub.wevm.dev/v1/userDataByFid?fid=${fid}`);
+    const userData = await userResponse.json();
+    console.log('User data:', userData);
+
+    // Fetch cast count from Hubble API
+    const castsResponse = await fetch(`https://api.hub.wevm.dev/v1/castsByFid?fid=${fid}&limit=1`);
+    const castsData = await castsResponse.json();
+    console.log('Casts data:', castsData);
+
+    if (!userData || !castsData) {
       throw new Error('User not found');
     }
 
-    // @ts-ignore - Neynar API types might be outdated
-    const postCount = user?.profile?.stats?.total_casts || 0;
+    // Get cast count from response
+    const postCount = castsData.count || 0;
+    console.log('Final post count:', postCount);
+    
     const status = getStatusText(postCount);
-    console.log('Post count:', postCount);
     console.log('Status:', status);
 
     const imageUrl = `${baseUrl}/api/og?count=${postCount}&status=${encodeURIComponent(status)}`;
