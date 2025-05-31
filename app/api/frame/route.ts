@@ -199,14 +199,14 @@ function getStatusText(postCount: number): string {
 }
 
 export async function POST(req: NextRequest) {
-  console.log('📨 POST request received');
-  console.log('🕐 Timestamp:', new Date().toISOString());
-  
   try {
-    const baseUrl = getBaseUrl(req);
-    console.log('📍 Using baseUrl:', baseUrl);
+    console.log('📨 POST request received');
+    console.log('🌐 Request URL:', req.url);
+    console.log('📋 Headers:', Object.fromEntries(req.headers.entries()));
 
-    console.log('📋 Parsing request data...');
+    const baseUrl = getBaseUrl(req);
+    console.log('📍 Base URL:', baseUrl);
+
     const data = await req.json();
     console.log('📊 Request data:', JSON.stringify(data, null, 2));
     
@@ -288,7 +288,7 @@ export async function POST(req: NextRequest) {
       throw new Error('baseUrl is not configured');
     }
 
-    // Simplified frame HTML without CSP and extra meta tags
+    // Frame HTML with stats
     const htmlResponse = `<!DOCTYPE html><html><head>
       <title>Farcaster Stats</title>
       <meta property="fc:frame" content="vNext" />
