@@ -110,58 +110,59 @@ export async function GET(req: NextRequest) {
                 <div
                   style={{
                     display: 'flex',
-                    fontSize: '70px',
-                    fontWeight: 'bold',
-                    color: '#F3F4F6',
-                    marginBottom: '20px',
-                  }}
-                >
-                  {count} Posts
-                </div>
-                
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: '40px',
-                    marginBottom: '30px',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '30px',
+                    width: '100%'
                   }}
                 >
                   <div
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      color: '#9CA3AF',
-                      fontSize: '32px',
+                      fontSize: '80px',
+                      fontWeight: 'bold',
+                      color: '#F3F4F6',
+                      marginBottom: '10px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', color: '#F3F4F6' }}>{followers}</div>
-                    <div>Followers</div>
+                    {count} Posts
                   </div>
                   
                   <div
                     style={{
                       display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
+                      fontSize: '60px',
                       color: '#9CA3AF',
-                      fontSize: '32px',
+                      marginBottom: '10px',
                     }}
                   >
-                    <div style={{ fontWeight: 'bold', color: '#F3F4F6' }}>{following}</div>
-                    <div>Following</div>
+                    {followers} Followers
                   </div>
-                </div>
-                
-                <div
-                  style={{
-                    display: 'flex',
-                    fontSize: '40px',
-                    color: '#9CA3AF',
-                  }}
-                >
-                  {status}
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      fontSize: '60px',
+                      color: '#9CA3AF',
+                      marginBottom: '10px',
+                    }}
+                  >
+                    {following} Following
+                  </div>
+                  
+                  <div
+                    style={{
+                      display: 'flex',
+                      fontSize: '50px',
+                      color: '#A855F7',
+                      fontWeight: 'bold',
+                      padding: '10px 30px',
+                      borderRadius: '15px',
+                      backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    }}
+                  >
+                    {status}
+                  </div>
                 </div>
               </>
             )}
