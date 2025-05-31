@@ -3,20 +3,26 @@ import { json } from 'stream/consumers';
 
 export const runtime = 'edge';
 
-const baseUrl = (() => {
+function getBaseUrl(req: NextRequest): string {
   // If HOST_URL is set (like an ngrok URL), use that
   if (process.env.HOST_URL) {
     return process.env.HOST_URL;
   }
-  
+
+  // Get host from request
+  const host = req.headers.get('host');
+  if (host?.includes('ngrok')) {
+    return `https://${host}`;
+  }
+
   // For development without HOST_URL, use localhost
   if (process.env.NODE_ENV === 'development') {
     return 'http://localhost:3001';
   }
-  
+
   // Production fallback
   return 'https://farcasterstats.vercel.app';
-})();
+}
 
 // Let's try a different API that actually has cast counts
  
@@ -27,7 +33,6 @@ const PINATA_JWT = process.env.PINATA_JWT;
 
 
 console.log('🚀 Frame API initialized');
-console.log('📍 Base URL:', baseUrl);
 console.log('🔗 Farcaster Hub:', FARCASTER_HUB);
 console.log('🔗 Pinata Hub:', PINATA_HUB);
 
@@ -142,8 +147,6 @@ interface UserDataWithEstimatedPosts {
 type UserData = UserDataWithRealPosts | UserDataWithEstimatedPosts;
 
 async function fetchUserData(fid: string): Promise<UserData | null> {
-
-  
   try {
     const pinataUrl = `${PINATA_HUB}?fid=${fid}`;
     console.log(`🔗 Pinata URL: ${pinataUrl}`);
@@ -154,27 +157,24 @@ async function fetchUserData(fid: string): Promise<UserData | null> {
         'Authorization': `Bearer ${PINATA_JWT}`
       }
     });
-    console.log("response",JSON.stringify(response))
+    
 
-    console.log('📊 Pinata response structure:', {
-      hasData: !!response?.messages,
-      totalCount: response?.messages?.length
-    });
-    
- 
-    
-    if (response?.data?.messages?.count) {
+
+    // Check if we have messages array directly in response
+    if (response?.messages && Array.isArray(response.messages)) {
       return {
-        realPosts: response.data.messages.length,
+        realPosts: response.messages.length,
         hasMore: false
       };
     }
-    
-    // Fallback to estimated count if API fails
 
+    // Return 0 if no valid data
+    return {
+      estimatedPosts: 0,
+      hasMore: false
+    };
   } catch (error) {
     console.error('💥 Error in fetchUserData:', error);
-    // Return estimated count on error
     return {
       estimatedPosts: 0,
       hasMore: false
@@ -203,6 +203,9 @@ export async function POST(req: NextRequest) {
   console.log('🕐 Timestamp:', new Date().toISOString());
   
   try {
+    const baseUrl = getBaseUrl(req);
+    console.log('📍 Using baseUrl:', baseUrl);
+
     console.log('📋 Parsing request data...');
     const data = await req.json();
     console.log('📊 Request data:', JSON.stringify(data, null, 2));
@@ -274,36 +277,53 @@ export async function POST(req: NextRequest) {
     const imageUrl = `${baseUrl}/api/og?count=${postCount}&status=${encodeURIComponent(status)}&followers=${followerCount}&following=${followingCount}`;
     console.log('🖼️ Generated image URL:', imageUrl);
 
+    // Add debug logging for baseUrl
+    console.log('📍 Current baseUrl:', baseUrl);
+    console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+    console.log('🔗 HOST_URL:', process.env.HOST_URL);
+
+    // Ensure baseUrl is set
+    if (!baseUrl) {
+      console.error('❌ baseUrl is not set!');
+      throw new Error('baseUrl is not configured');
+    }
+
+    // Simplified frame HTML without CSP and extra meta tags
     const htmlResponse = `<!DOCTYPE html><html><head>
-      <meta property="fc:frame" content="vNext"/>
-      <meta property="fc:frame:image" content="${imageUrl}"/>
-      <meta property="fc:frame:button:1" content="Refresh Stats"/>
-      <meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/>
-      <meta http-equiv="Content-Security-Policy" content="img-src 'self' ${baseUrl} https://*.ngrok-free.app https://*.ngrok.io data: blob:; connect-src 'self' ${baseUrl} https://*.ngrok-free.app https://*.ngrok.io;">
-    </head><body><p>${postCount} posts - ${status} | ${followerCount} followers | ${followingCount} following</p></body></html>`;
+      <title>Farcaster Stats</title>
+      <meta property="fc:frame" content="vNext" />
+      <meta property="fc:frame:image" content="${imageUrl}" />
+      <meta property="fc:frame:button:1" content="Refresh Stats" />
+      <meta property="fc:frame:post_url" content="${baseUrl}/api/frame" />
+    </head></html>`;
     
+    console.log('📄 Frame HTML:', htmlResponse);
     console.log('✅ Sending successful response');
-    console.log('📄 HTML response:', htmlResponse);
 
     return new NextResponse(htmlResponse, {
       headers: {
         'Content-Type': 'text/html',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
       },
     });
   } catch (error) {
     console.error('💥 POST request error:', error);
     console.error('📊 Error stack:', (error as Error).stack);
     
+    const baseUrl = getBaseUrl(req);
     const errorUrl = `${baseUrl}/api/og?count=0&status=Error&followers=0&following=0`;
     console.log('🚨 Generated error image URL:', errorUrl);
 
-    const errorResponse = `<!DOCTYPE html><html><head><meta property="fc:frame" content="vNext"/><meta property="fc:frame:image" content="${errorUrl}"/><meta property="fc:frame:button:1" content="Try Again"/><meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/></head><body>Error occurred</body></html>`;
+    const errorResponse = `<!DOCTYPE html><html><head>
+      <title>Farcaster Stats Error</title>
+      <meta property="fc:frame" content="vNext"/>
+      <meta property="fc:frame:image" content="${errorUrl}"/>
+      <meta property="fc:frame:button:1" content="Try Again"/>
+      <meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/>
+      <meta property="og:image" content="${errorUrl}"/>
+      <meta property="fc:frame:image:aspect_ratio" content="1.91:1"/>
+    </head><body>Error occurred</body></html>`;
     
     console.log('❌ Sending error response');
-    console.log('📄 Error HTML response:', errorResponse);
 
     return new NextResponse(errorResponse, {
       headers: {
@@ -322,11 +342,14 @@ export async function GET(req: NextRequest) {
   console.log('🌐 Request URL:', req.url);
   console.log('📋 Request headers:', Object.fromEntries(req.headers.entries()));
   
+  const baseUrl = getBaseUrl(req);
+  console.log('📍 Using baseUrl:', baseUrl);
+  
   // Check if this is being accessed by a Farcaster client or regular browser
   const userAgent = req.headers.get('user-agent') || '';
   const acceptHeader = req.headers.get('accept') || '';
   
-  console.log('🔍 User Agent:', userAgent);
+  console.log('�� User Agent:', userAgent);
   console.log('📝 Accept Header:', acceptHeader);
   
   // If this looks like a regular browser request, redirect to the main page
@@ -341,15 +364,16 @@ export async function GET(req: NextRequest) {
   console.log('🖼️ Initial image URL:', imageUrl);
 
   const htmlResponse = `<!DOCTYPE html><html><head>
+    <title>Farcaster Stats</title>
     <meta property="fc:frame" content="vNext"/>
     <meta property="fc:frame:image" content="${imageUrl}"/>
     <meta property="fc:frame:button:1" content="🎯 Get My Stats"/>
     <meta property="fc:frame:post_url" content="${baseUrl}/api/frame"/>
-    <meta http-equiv="Content-Security-Policy" content="img-src 'self' ${baseUrl} https://*.ngrok-free.app https://*.ngrok.io data: blob:; connect-src 'self' ${baseUrl} https://*.ngrok-free.app https://*.ngrok.io;">
+    <meta property="og:image" content="${imageUrl}"/>
+    <meta property="fc:frame:image:aspect_ratio" content="1.91:1"/>
   </head><body></body></html>`;
   
   console.log('✅ Sending GET frame response');
-  console.log('📄 HTML response:', htmlResponse);
 
   return new NextResponse(htmlResponse, {
     headers: {
