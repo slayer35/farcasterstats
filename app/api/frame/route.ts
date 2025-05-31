@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { json } from 'stream/consumers';
 
 export const runtime = 'edge';
 
@@ -21,16 +22,19 @@ const baseUrl = (() => {
  
 
 const FARCASTER_HUB = 'https://api.warpcast.com/v2';
+const PINATA_HUB = 'https://hub.pinata.cloud/v1/castsByFid';
+const PINATA_JWT = process.env.PINATA_JWT;
 
 
 console.log('🚀 Frame API initialized');
 console.log('📍 Base URL:', baseUrl);
 console.log('🔗 Farcaster Hub:', FARCASTER_HUB);
+console.log('🔗 Pinata Hub:', PINATA_HUB);
 
 
 async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 10000) {
   console.log(`🔄 fetchWithRetry called for: ${url}`);
-  console.log(`⚙️ Options:`, JSON.stringify(options, null, 2));
+
   console.log(`🔢 Retries: ${retries}, Timeout: ${timeout}ms`);
   
   let lastError;
@@ -51,8 +55,7 @@ async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 
       });
       
       clearTimeout(timeoutId);
-      console.log(`📊 Response status: ${response.status} for ${url}`);
-      console.log(`📋 Response headers:`, Object.fromEntries(response.headers.entries()));
+   
       
       if (!response.ok) {
         console.error(`❌ HTTP error! status: ${response.status} for ${url}`);
@@ -60,17 +63,14 @@ async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 
       }
 
       const text = await response.text();
-      console.log(`📝 Response text length: ${text.length} characters`);
-      console.log(`📄 Response preview: ${text.substring(0, 200)}...`);
+
       
       try {
         const jsonData = JSON.parse(text);
-        console.log(`✅ Successfully parsed JSON for ${url}`);
-        console.log(`📦 JSON data:`, JSON.stringify(jsonData, null, 2));
+   
         return jsonData;
       } catch (e) {
-        console.error(`❌ Invalid JSON response for ${url}:`, e);
-        console.log('📄 Full response text:', text);
+  
         throw new Error('Invalid JSON response');
       }
     } catch (error) {
@@ -101,7 +101,7 @@ async function fetchFarcasterStats(fid: string) {
       }
     });
     
-    console.log('📊 Warpcast user response:', JSON.stringify(userResponse, null, 2));
+
     
     const user = userResponse?.result?.user;
     if (user) {
@@ -139,28 +139,46 @@ interface UserDataWithEstimatedPosts {
   hasMore: boolean;
 }
 
-interface UserDataWithAirstack {
-  data: {
-    FarcasterCasts: {
-      Cast: Array<any>;
-    };
-  };
-}
-
-type UserData = UserDataWithRealPosts | UserDataWithEstimatedPosts | UserDataWithAirstack;
+type UserData = UserDataWithRealPosts | UserDataWithEstimatedPosts;
 
 async function fetchUserData(fid: string): Promise<UserData | null> {
-  console.log(`👤 fetchUserData called with FID: ${fid}`);
+
   
   try {
-    // For now, return a basic structure with estimated posts
-    return {
-      estimatedPosts: Math.floor(Math.random() * 500) + 1, // Random number between 1-500 for testing
-      hasMore: false
-    };
+    const pinataUrl = `${PINATA_HUB}?fid=${fid}`;
+    console.log(`🔗 Pinata URL: ${pinataUrl}`);
+    
+    const response = await fetchWithRetry(pinataUrl, {
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${PINATA_JWT}`
+      }
+    });
+    console.log("response",JSON.stringify(response))
+
+    console.log('📊 Pinata response structure:', {
+      hasData: !!response?.messages,
+      totalCount: response?.messages?.length
+    });
+    
+ 
+    
+    if (response?.data?.messages?.count) {
+      return {
+        realPosts: response.data.messages.length,
+        hasMore: false
+      };
+    }
+    
+    // Fallback to estimated count if API fails
+
   } catch (error) {
     console.error('💥 Error in fetchUserData:', error);
-    return null;
+    // Return estimated count on error
+    return {
+      estimatedPosts: 0,
+      hasMore: false
+    };
   }
 }
 
@@ -227,10 +245,6 @@ export async function POST(req: NextRequest) {
       // Using estimated count
       postCount = (userData as UserDataWithEstimatedPosts).estimatedPosts;
       console.log(`📊 Using estimated post count: ${postCount}`);
-    } else if ('data' in userData && (userData as UserDataWithAirstack).data?.FarcasterCasts?.Cast?.length) {
-      // Count from Airstack would be here
-      postCount = (userData as UserDataWithAirstack).data.FarcasterCasts.Cast.length;
-      console.log(`📊 Using Airstack cast count: ${postCount}`);
     }
     
     // Get follower/following counts
