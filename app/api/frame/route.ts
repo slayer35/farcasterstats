@@ -9,16 +9,6 @@ function getBaseUrl(req: NextRequest): string {
     return process.env.HOST_URL;
   }
 
-  // Get host from request
-  const host = req.headers.get('host');
-  if (host?.includes('ngrok')) {
-    return `https://${host}`;
-  }
-
-  // For development without HOST_URL, use localhost
-  if (process.env.NODE_ENV === 'development') {
-    return 'http://localhost:3001';
-  }
 
   // Production fallback
   return 'https://farcasterstats.vercel.app';
