@@ -3,6 +3,29 @@ import { json } from 'stream/consumers';
 
 export const runtime = 'edge';
 
+// Simple in-memory cache with TTL
+const cache = new Map<string, { data: any; timestamp: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_RESET = 60 * 1000; // 1 minute
+let lastRequestTime = 0;
+
+function getFromCache(key: string) {
+  const cached = cache.get(key);
+  if (!cached) return null;
+  
+  const now = Date.now();
+  if (now - cached.timestamp > CACHE_TTL) {
+    cache.delete(key);
+    return null;
+  }
+  
+  return cached.data;
+}
+
+function setCache(key: string, data: any) {
+  cache.set(key, { data, timestamp: Date.now() });
+}
+
 function getBaseUrl(req: NextRequest): string {
   // If HOST_URL is set (like an ngrok URL), use that
   if (process.env.HOST_URL) {
@@ -29,14 +52,22 @@ console.log('🔗 Pinata Hub:', PINATA_HUB);
 
 async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 10000) {
   console.log(`🔄 fetchWithRetry called for: ${url}`);
+  console.log(`🔑 Using headers:`, JSON.stringify(options.headers, null, 2));
 
-  console.log(`🔢 Retries: ${retries}, Timeout: ${timeout}ms`);
-  
   let lastError;
   
   for (let i = 0; i < retries; i++) {
     console.log(`🎯 Attempt ${i + 1}/${retries} for ${url}`);
     try {
+      // Check rate limit
+      const now = Date.now();
+      const timeSinceLastRequest = now - lastRequestTime;
+      if (timeSinceLastRequest < RATE_LIMIT_RESET) {
+        const waitTime = RATE_LIMIT_RESET - timeSinceLastRequest;
+        console.log(`⏳ Rate limit cooling down, waiting ${waitTime}ms...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+      
       const controller = new AbortController();
       const timeoutId = setTimeout(() => {
         console.log(`⏰ Request timeout for ${url}`);
@@ -44,6 +75,7 @@ async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 
       }, timeout);
       
       console.log(`📡 Making fetch request to: ${url}`);
+      lastRequestTime = Date.now();
       const response = await fetch(url, {
         ...options,
         signal: controller.signal,
@@ -51,28 +83,40 @@ async function fetchWithRetry(url: string, options: any, retries = 3, timeout = 
       
       clearTimeout(timeoutId);
    
-      
       if (!response.ok) {
+        if (response.status === 429) {
+          const retryAfter = response.headers.get('Retry-After');
+          const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : RATE_LIMIT_RESET;
+          console.log(`⏳ Rate limited, waiting ${waitTime}ms...`);
+          await new Promise(resolve => setTimeout(resolve, waitTime));
+          continue;
+        }
+        
         console.error(`❌ HTTP error! status: ${response.status} for ${url}`);
-        throw new Error(`HTTP error! status: ${response.status}`);
+        console.error(`📄 Response headers:`, Object.fromEntries(response.headers.entries()));
+        const errorText = await response.text();
+        console.error(`📄 Response body:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`);
       }
 
       const text = await response.text();
-
+      console.log(`✅ Response received:`, text.substring(0, 200) + '...');
       
       try {
         const jsonData = JSON.parse(text);
-   
+        console.log(`✅ Parsed JSON data:`, JSON.stringify(jsonData, null, 2));
         return jsonData;
       } catch (e) {
-  
+        console.error(`❌ Failed to parse JSON:`, e);
         throw new Error('Invalid JSON response');
       }
     } catch (error) {
       lastError = error;
       console.error(`💥 Attempt ${i + 1} failed for ${url}:`, error);
       if (i < retries - 1) {
-        console.log(`⏳ Waiting before retry...`);
+        const waitTime = Math.pow(2, i) * 1000; // Exponential backoff
+        console.log(`⏳ Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
       continue;
     }
@@ -138,8 +182,22 @@ type UserData = UserDataWithRealPosts | UserDataWithEstimatedPosts;
 
 async function fetchUserData(fid: string): Promise<UserData | null> {
   try {
+    // Check cache first
+    const cacheKey = `user_data_${fid}`;
+    const cachedData = getFromCache(cacheKey);
+    if (cachedData) {
+      console.log(`✅ Using cached data for FID ${fid}`);
+      return cachedData;
+    }
+
     const pinataUrl = `${PINATA_HUB}?fid=${fid}`;
     console.log(`🔗 Pinata URL: ${pinataUrl}`);
+    console.log(`🔑 Pinata JWT available: ${!!PINATA_JWT}`);
+    
+    if (!PINATA_JWT) {
+      console.error('❌ PINATA_JWT is not set!');
+      throw new Error('PINATA_JWT is not configured');
+    }
     
     const response = await fetchWithRetry(pinataUrl, {
       headers: {
@@ -147,22 +205,30 @@ async function fetchUserData(fid: string): Promise<UserData | null> {
         'Authorization': `Bearer ${PINATA_JWT}`
       }
     });
-    
-
 
     // Check if we have messages array directly in response
     if (response?.messages && Array.isArray(response.messages)) {
-      return {
+      console.log(`✅ Found ${response.messages.length} messages`);
+      const result = {
         realPosts: response.messages.length,
         hasMore: false
       };
+      
+      // Cache the result
+      setCache(cacheKey, result);
+      return result;
     }
 
+    console.warn('⚠️ No messages array found in response');
     // Return 0 if no valid data
-    return {
+    const result = {
       estimatedPosts: 0,
       hasMore: false
     };
+    
+    // Cache the result
+    setCache(cacheKey, result);
+    return result;
   } catch (error) {
     console.error('💥 Error in fetchUserData:', error);
     return {
